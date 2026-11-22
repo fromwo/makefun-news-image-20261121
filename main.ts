@@ -11,7 +11,7 @@
 // Running this script copies the artwork into the output directory so
 // the generated entry.png is available at /output/entry.png.
 
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,6 +22,20 @@ const targetImage = join(outputDir, "entry.png");
 
 if (!existsSync(sourceImage)) {
   throw new Error(`entry.png not found next to main.ts: ${sourceImage}`);
+}
+
+// A PNG file always starts with the 8-byte signature
+// 89 50 4E 47 0D 0A 1A 0A. Refuse to copy anything else so a
+// misnamed or truncated file can never be submitted as the entry.
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const fd = openSync(sourceImage, "r");
+try {
+  const header = Buffer.alloc(PNG_SIGNATURE.length);
+  if (readSync(fd, header, 0, header.length, 0) !== PNG_SIGNATURE.length || !header.equals(PNG_SIGNATURE)) {
+    throw new Error(`entry.png is not a valid PNG file: ${sourceImage}`);
+  }
+} finally {
+  closeSync(fd);
 }
 
 mkdirSync(outputDir, { recursive: true });
